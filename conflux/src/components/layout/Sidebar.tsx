@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
 const navItems = [
-  { href: '/capture/note', label: 'Capture Note' },
+  { href: '/capture/smart', label: 'Smart Capture', highlight: true },
+  { href: '/capture/note', label: 'Manual Note' },
   { href: '/people', label: 'People' },
   { href: '/organizations', label: 'Organizations' },
   { href: '/interactions', label: 'Interactions' },
@@ -22,7 +23,11 @@ export function Sidebar() {
           <Link
             key={item.href}
             href={item.href}
-            className="block rounded-md px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            className={`block rounded-md px-3 py-2 text-sm font-medium ${
+              item.highlight
+                ? 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200'
+                : 'text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
+            }`}
           >
             {item.label}
           </Link>
