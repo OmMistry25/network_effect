@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getSupabaseServerClient } from '@/lib/supabase/serverClient';
 import { getActiveWorkspaceId } from '@/lib/supabase/auth';
+import { AffiliationsSection } from '@/components/people/AffiliationsSection';
 import type { Person } from '@/types/domain';
 
 interface Props {
@@ -84,8 +85,7 @@ export default async function PersonDetailPage({ params }: Props) {
       </div>
 
       <div className="mt-8 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-        <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">Affiliations</h2>
-        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">No affiliations yet.</p>
+        <AffiliationsSection personId={personId} workspaceId={workspaceId} />
       </div>
 
       <div className="mt-8 border-t border-zinc-200 pt-6 dark:border-zinc-800">
