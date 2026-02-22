@@ -14,6 +14,8 @@ interface EntityDecision {
   action: 'link' | 'create' | 'skip';
   linkedId?: string;
   newName?: string;
+  updateTitle?: boolean;
+  createAffiliation?: boolean;
 }
 
 export default function SmartCapturePage() {
@@ -155,6 +157,8 @@ export default function SmartCapturePage() {
       action: mr.suggestedAction === 'link' ? 'link' : mr.suggestedAction === 'create' ? 'create' : 'skip',
       linkedId: mr.match.existingId,
       newName: mr.extractedName,
+      updateTitle: mr.match.type !== 'new' && !!mr.title,
+      createAffiliation: !!mr.organizationName,
     }));
 
     setEntityDecisions(decisions);
@@ -178,33 +182,89 @@ export default function SmartCapturePage() {
     try {
       const participantIds: string[] = [];
 
-      // Process entity decisions
+      // First pass: create any new organizations so we have their IDs
+      const newOrgIds = new Map<string, string>();
       for (const decision of entityDecisions) {
         if (decision.action === 'skip') continue;
-
-        if (decision.action === 'link' && decision.linkedId) {
-          if (decision.matchResult.type === 'person') {
-            participantIds.push(decision.linkedId);
-          }
-        } else if (decision.action === 'create') {
-          if (decision.matchResult.type === 'person') {
-            const { data: newPerson } = await supabase
-              .from('people')
-              .insert({
-                workspace_id: workspaceId,
-                full_name: decision.newName || decision.matchResult.extractedName,
-                notes: `Auto-created from interaction. Context: ${decision.matchResult.context}`,
-              })
-              .select()
-              .single();
-
-            if (newPerson) participantIds.push(newPerson.id);
-          } else if (decision.matchResult.type === 'organization') {
-            await supabase.from('organizations').insert({
+        if (decision.matchResult.type === 'organization' && decision.action === 'create') {
+          const { data: newOrg } = await supabase
+            .from('organizations')
+            .insert({
               workspace_id: workspaceId,
               name: decision.newName || decision.matchResult.extractedName,
               notes: `Auto-created from interaction. Context: ${decision.matchResult.context}`,
-            });
+            })
+            .select()
+            .single();
+          if (newOrg) {
+            newOrgIds.set(decision.matchResult.extractedName.toLowerCase(), newOrg.id);
+          }
+        }
+      }
+
+      // Second pass: process people
+      for (const decision of entityDecisions) {
+        if (decision.action === 'skip') continue;
+        if (decision.matchResult.type !== 'person') continue;
+
+        let personId: string | undefined;
+
+        if (decision.action === 'link' && decision.linkedId) {
+          personId = decision.linkedId;
+          participantIds.push(personId);
+
+          // Update title if requested
+          if (decision.updateTitle && decision.matchResult.title) {
+            await supabase
+              .from('people')
+              .update({ title: decision.matchResult.title })
+              .eq('id', personId);
+          }
+        } else if (decision.action === 'create') {
+          const { data: newPerson } = await supabase
+            .from('people')
+            .insert({
+              workspace_id: workspaceId,
+              full_name: decision.newName || decision.matchResult.extractedName,
+              title: decision.matchResult.title || null,
+              notes: `Auto-created from interaction. Context: ${decision.matchResult.context}`,
+            })
+            .select()
+            .single();
+
+          if (newPerson) {
+            personId = newPerson.id;
+            participantIds.push(personId);
+          }
+        }
+
+        // Create affiliation if person has org association
+        if (personId && decision.createAffiliation && decision.matchResult.organizationName) {
+          let orgId = decision.matchResult.organizationId;
+          
+          // Check if org was just created
+          if (!orgId) {
+            orgId = newOrgIds.get(decision.matchResult.organizationName.toLowerCase());
+          }
+
+          if (orgId) {
+            // Check if affiliation already exists
+            const { data: existingAff } = await supabase
+              .from('affiliations')
+              .select('id')
+              .eq('person_id', personId)
+              .eq('organization_id', orgId)
+              .limit(1);
+
+            if (!existingAff || existingAff.length === 0) {
+              await supabase.from('affiliations').insert({
+                workspace_id: workspaceId,
+                person_id: personId,
+                organization_id: orgId,
+                role_title: decision.matchResult.title || null,
+                is_primary: true,
+              });
+            }
           }
         }
       }
@@ -394,8 +454,18 @@ export default function SmartCapturePage() {
                           <span className="font-medium text-zinc-900 dark:text-zinc-100">
                             {decision.matchResult.extractedName}
                           </span>
+                          {decision.matchResult.title && (
+                            <span className="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                              {decision.matchResult.title}
+                            </span>
+                          )}
                         </div>
                         <p className="mt-1 text-sm text-zinc-500">{decision.matchResult.context}</p>
+                        {decision.matchResult.organizationName && (
+                          <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                            📍 Associated with: {decision.matchResult.organizationName}
+                          </p>
+                        )}
                         {decision.matchResult.match.type === 'partial' && (
                           <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
                             Possible match: {decision.matchResult.match.existingName} ({Math.round(decision.matchResult.match.score * 100)}% confident)
@@ -441,6 +511,34 @@ export default function SmartCapturePage() {
                         Skip
                       </button>
                     </div>
+
+                    {/* Additional options for people with context */}
+                    {decision.matchResult.type === 'person' && decision.action !== 'skip' && (
+                      <div className="mt-3 space-y-2 border-t border-zinc-100 pt-3 dark:border-zinc-700">
+                        {decision.action === 'link' && decision.matchResult.title && (
+                          <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                            <input
+                              type="checkbox"
+                              checked={decision.updateTitle ?? true}
+                              onChange={(e) => updateDecision(index, { updateTitle: e.target.checked })}
+                              className="rounded border-zinc-300"
+                            />
+                            Update title to &quot;{decision.matchResult.title}&quot;
+                          </label>
+                        )}
+                        {decision.matchResult.organizationName && (
+                          <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                            <input
+                              type="checkbox"
+                              checked={decision.createAffiliation ?? true}
+                              onChange={(e) => updateDecision(index, { createAffiliation: e.target.checked })}
+                              className="rounded border-zinc-300"
+                            />
+                            {decision.action === 'link' ? 'Add' : 'Create'} affiliation with {decision.matchResult.organizationName}
+                          </label>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

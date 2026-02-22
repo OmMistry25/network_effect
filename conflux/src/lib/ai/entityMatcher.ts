@@ -5,6 +5,9 @@ export interface MatchResult {
   extractedName: string;
   context: string;
   confidence: number;
+  title?: string;
+  organizationName?: string;
+  organizationId?: string;
   match: {
     type: 'exact' | 'partial' | 'new';
     existingId?: string;
@@ -83,11 +86,19 @@ export function matchEntities(
     name: string;
     context: string;
     confidence: number;
+    title?: string;
+    organizationName?: string;
   }>,
   existingPeople: Person[],
   existingOrgs: Organization[]
 ): MatchResult[] {
   const results: MatchResult[] = [];
+
+  // First pass: build org name to ID map
+  const orgNameToId = new Map<string, string>();
+  for (const org of existingOrgs) {
+    orgNameToId.set(org.name.toLowerCase(), org.id);
+  }
 
   for (const entity of extractedEntities) {
     if (entity.type === 'topic') continue;
@@ -99,15 +110,28 @@ export function matchEntities(
 
     const bestMatch = findBestMatch(entity.name, candidates);
 
+    // For people, try to find their associated org
+    let organizationId: string | undefined;
+    if (entity.type === 'person' && entity.organizationName) {
+      const orgMatch = findBestMatch(entity.organizationName, 
+        existingOrgs.map((o) => ({ id: o.id, name: o.name }))
+      );
+      if (orgMatch && orgMatch.score >= 0.7) {
+        organizationId = orgMatch.id;
+      }
+    }
+
     let matchResult: MatchResult;
 
     if (bestMatch && bestMatch.score >= 0.9) {
-      // High confidence exact match
       matchResult = {
         type: entity.type,
         extractedName: entity.name,
         context: entity.context,
         confidence: entity.confidence,
+        title: entity.title,
+        organizationName: entity.organizationName,
+        organizationId,
         match: {
           type: 'exact',
           existingId: bestMatch.id,
@@ -117,12 +141,14 @@ export function matchEntities(
         suggestedAction: 'link',
       };
     } else if (bestMatch && bestMatch.score >= 0.6) {
-      // Partial match - needs review
       matchResult = {
         type: entity.type,
         extractedName: entity.name,
         context: entity.context,
         confidence: entity.confidence,
+        title: entity.title,
+        organizationName: entity.organizationName,
+        organizationId,
         match: {
           type: 'partial',
           existingId: bestMatch.id,
@@ -132,12 +158,14 @@ export function matchEntities(
         suggestedAction: 'review',
       };
     } else {
-      // No match - suggest creating new
       matchResult = {
         type: entity.type,
         extractedName: entity.name,
         context: entity.context,
         confidence: entity.confidence,
+        title: entity.title,
+        organizationName: entity.organizationName,
+        organizationId,
         match: {
           type: 'new',
           score: 0,

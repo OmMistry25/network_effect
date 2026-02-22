@@ -27,6 +27,8 @@ For each entity, provide:
 - context: A brief phrase explaining their role/relevance in this context
 - confidence: 0.0-1.0 score for how confident you are this is a real entity (not a common word)
 - alternativeNames: For people, include possible full name variations if only a first name is given
+- title: (for people only) Their job title if mentioned (e.g., "CEO", "VP of Sales", "Engineer")
+- organizationName: (for people only) The organization they're associated with if mentioned
 
 Also generate a 1-2 sentence summary of the interaction.
 
@@ -34,17 +36,25 @@ IMPORTANT RULES:
 - For partial names (e.g., "John"), set confidence lower (0.5-0.7) and suggest possible full names
 - For full names or clear entities, set confidence higher (0.8-1.0)
 - Ignore generic terms that aren't specific entities
-- Include role/title information in context if mentioned
+- ALWAYS extract title and organizationName when a person's role at a company is mentioned (e.g., "Rayan, CEO of Theta" -> title: "CEO", organizationName: "Theta")
 
 Respond ONLY with valid JSON in this format:
 {
   "entities": [
     {
       "type": "person",
-      "name": "John",
-      "context": "discussed the Q4 roadmap",
-      "confidence": 0.6,
-      "alternativeNames": ["John Smith", "John Doe"]
+      "name": "Rayan",
+      "context": "CEO of Theta, involved in negotiations",
+      "confidence": 0.9,
+      "alternativeNames": [],
+      "title": "CEO",
+      "organizationName": "Theta"
+    },
+    {
+      "type": "organization",
+      "name": "Theta",
+      "context": "company involved in negotiations",
+      "confidence": 0.8
     }
   ],
   "summary": "Brief summary of the interaction"
