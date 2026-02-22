@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getSupabaseServerClient } from '@/lib/supabase/serverClient';
 import { getActiveWorkspaceId } from '@/lib/supabase/auth';
 import { AffiliationsSection } from '@/components/people/AffiliationsSection';
+import { CreateEdgeSection } from '@/components/graph/CreateEdgeSection';
 import type { Person } from '@/types/domain';
 
 interface Props {
@@ -86,6 +87,10 @@ export default async function PersonDetailPage({ params }: Props) {
 
       <div className="mt-8 border-t border-zinc-200 pt-6 dark:border-zinc-800">
         <AffiliationsSection personId={personId} workspaceId={workspaceId} />
+      </div>
+
+      <div className="mt-8 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+        <CreateEdgeSection personId={personId} workspaceId={workspaceId} />
       </div>
 
       <div className="mt-8 border-t border-zinc-200 pt-6 dark:border-zinc-800">
